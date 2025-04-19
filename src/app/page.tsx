@@ -1,103 +1,120 @@
-import Image from "next/image";
+import Link from 'next/link';
+import { IconWallet, IconMessage, IconScale, IconBolt } from '@tabler/icons-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function Home() {
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="flex flex-col items-center gap-8 py-8">
+      <section className="w-full max-w-5xl space-y-6 text-center">
+        <h1 className="text-4xl font-bold tracking-tighter sm:text-5xl md:text-6xl">
+          <span className="text-primary">Shopstr</span> Payment Escrow
+        </h1>
+        <p className="mx-auto max-w-3xl text-lg text-muted-foreground sm:text-xl">
+          A secure payment escrow system for Shopstr, enabling trust-minimized transactions 
+          between buyers and merchants with automated order processing.
+        </p>
+        <div className="flex justify-center gap-4">
+          <Link href="/nostr">
+            <Button size="lg" className="gap-2">
+              <IconMessage size={20} />
+              <span>Get Started</span>
+            </Button>
+          </Link>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </section>
+
+      <section className="w-full max-w-5xl py-8">
+        <h2 className="mb-8 text-center text-3xl font-bold">Key Features</h2>
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <Card>
+            <CardHeader>
+              <IconMessage className="h-10 w-10 text-primary mb-2" />
+              <CardTitle>Gift-wrapped Nostr Messages</CardTitle>
+              <CardDescription>
+                Send and receive encrypted messages according to NIP-17
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">
+                Securely communicate order details and payment information
+                between buyers and sellers using encrypted Nostr messages.
+              </p>
+              <div className="mt-4">
+                <Link href="/nostr">
+                  <Button variant="outline" size="sm">Try It</Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <IconWallet className="h-10 w-10 text-primary mb-2" />
+              <CardTitle>P2PK-locked Cashu Tokens</CardTitle>
+              <CardDescription>
+                Create and spend tokens locked to specific public keys
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">
+                Lock your Cashu tokens to specific public keys, ensuring
+                only the intended recipient can spend them. Perfect for
+                escrow payments.
+              </p>
+              <div className="mt-4">
+                <Link href="/cashu">
+                  <Button variant="outline" size="sm">Try It</Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <IconBolt className="h-10 w-10 text-primary mb-2" />
+              <CardTitle>HODL Invoices</CardTitle>
+              <CardDescription>
+                Create and spend from time-locked Lightning invoices
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">
+                Use HODL invoices to automate the release of payments
+                once order conditions are met. Ideal for automated
+                merchant operations.
+              </p>
+              <div className="mt-4">
+                <Link href="/lightning">
+                  <Button variant="outline" size="sm">Try It</Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="sm:col-span-2 lg:col-span-3">
+            <CardHeader>
+              <IconScale className="h-10 w-10 text-primary mb-2" />
+              <CardTitle>Dispute Resolution</CardTitle>
+              <CardDescription>
+                Open disputes between buyer and seller with optional third-party arbitration
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">
+                In case of disagreements, our platform offers a structured dispute resolution
+                process. Buyers can raise issues, merchants can respond, and optional third-party
+                arbiters can help resolve complex disputes fairly.
+              </p>
+              <div className="mt-4">
+                <Link href="/disputes">
+                  <Button variant="outline" size="sm">Try It</Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
     </div>
   );
 }
