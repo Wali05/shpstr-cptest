@@ -1,4 +1,4 @@
-import { finalizeEvent, getPublicKey, nip04, SimplePool, type Event } from 'nostr-tools';
+import { finalizeEvent, getPublicKey, nip04, SimplePool, type Event, type Filter } from 'nostr-tools';
 
 // Define available relays from environment variables
 const relays = process.env.NEXT_PUBLIC_NOSTR_RELAYS?.split(',') || [
@@ -142,20 +142,21 @@ export async function receiveGiftWrappedMessages(
   
   try {
     // Get events from relays
-    const filter = {
+    const filter: Filter = {
       kinds: [4], // Encrypted direct message kind
       '#p': [publicKey],
       since,
       limit,
     };
     
-    const events = await pool.list(relays, [filter]);
+    // Use the correct method for SimplePool in nostr-tools v2.x
+    const events = await pool.querySync(relays, filter) as Event[];
     
     console.log(`Retrieved ${events.length} encrypted messages`);
     
     // Decrypt messages
     const messages = await Promise.all(
-      events.map(async (event) => {
+      events.map(async (event: Event) => {
         try {
           const decryptedContent = await nip04.decrypt(privateKeyBytes, event.pubkey, event.content);
           
@@ -172,7 +173,10 @@ export async function receiveGiftWrappedMessages(
     );
     
     // Filter out failed decryptions
-    const validMessages = messages.filter((m): m is { message: string; sender: string; timestamp: number } => m !== null);
+    const validMessages = messages.filter(
+      (m: { message: string; sender: string; timestamp: number } | null): 
+      m is { message: string; sender: string; timestamp: number } => m !== null
+    );
     console.log(`Successfully decrypted ${validMessages.length} messages`);
     
     return validMessages;
@@ -202,31 +206,33 @@ export function subscribeToGiftWrappedMessages(
   console.log(`Subscribing to real-time messages for ${publicKey}`);
   
   // Subscribe to events
-  const filter = {
+  const filter: Filter = {
     kinds: [4], // Encrypted direct message kind
     '#p': [publicKey],
   };
   
-  const sub = pool.subscribe(relays, [filter]);
-  
-  sub.on('event', async (event: Event) => {
-    try {
-      const decryptedContent = await nip04.decrypt(privateKeyBytes, event.pubkey, event.content);
-      
-      callback({
-        message: decryptedContent,
-        sender: event.pubkey,
-        timestamp: event.created_at,
-      });
-      
-      console.log('Received and decrypted new message');
-    } catch (error) {
-      console.error('Failed to decrypt message:', error);
+  // Use the proper subscription method from nostr-tools v2.x
+  pool.subscribe(relays, filter, {
+    onevent: async (event: Event) => {
+      try {
+        const decryptedContent = await nip04.decrypt(privateKeyBytes, event.pubkey, event.content);
+        
+        callback({
+          message: decryptedContent,
+          sender: event.pubkey,
+          timestamp: event.created_at,
+        });
+        
+        console.log('Received and decrypted new message');
+      } catch (error) {
+        console.error('Failed to decrypt message:', error);
+      }
     }
   });
   
-  // Return unsubscribe function
+  // Return a function that closes the relay connections
   return () => {
-    sub.unsub();
+    // Close all relay connections
+    pool.close(relays);
   };
 } 
