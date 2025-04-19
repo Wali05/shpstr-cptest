@@ -1,4 +1,4 @@
-# ⚡ Shopstr Payment Escrow System
+# 🛡️ Shopstr Payment Escrow System Competency Test
 
 A Next.js application for secure payment escrow using Bitcoin technologies, enabling trustless transactions between buyers and merchants with Nostr messaging and dispute resolution.
 
