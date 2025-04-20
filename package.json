@@ -2,6 +2,7 @@
     "name": "shopstr-payment-escrow",
     "version": "0.1.0",
     "private": true,
+    "type": "module",
     "scripts": {
         "dev": "next dev",
         "build": "next build",
@@ -11,6 +12,7 @@
         "format": "prettier --write ."
     },
     "dependencies": {
+        "@cashu/cashu-ts": "^2.4.2",
         "@hookform/resolvers": "^5.0.1",
         "@radix-ui/react-dialog": "^1.1.10",
         "@radix-ui/react-label": "^2.1.4",
@@ -22,6 +24,7 @@
         "clsx": "^2.1.1",
         "dotenv-webpack": "^8.1.0",
         "lucide-react": "^0.501.0",
+        "motion": "^12.7.4",
         "next": "15.3.1",
         "nostr-tools": "^2.12.0",
         "react": "^19.0.0",

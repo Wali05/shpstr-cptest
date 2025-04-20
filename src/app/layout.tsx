@@ -1,6 +1,7 @@
 import "./globals.css";
 import { Layout } from "@/components/layout/Layout";
 import { Toaster } from "@/components/ui/toaster";
+import { ThemeProvider } from "@/lib/hooks/use-theme";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -14,10 +15,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <body>
-        <Layout>{children}</Layout>
-        <Toaster />
+        <ThemeProvider>
+          <Layout>{children}</Layout>
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );
