@@ -12,6 +12,10 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
+import {
+  createP2PKLockedToken,
+  spendP2PKLockedToken,
+} from '@/lib/services/cashu';
 
 // Define form schemas
 const createTokenFormSchema = z.object({
@@ -90,21 +94,14 @@ export default function CashuPage() {
   // Create P2PK-locked token
   const createToken = async (values: z.infer<typeof createTokenFormSchema>) => {
     try {
-      // In a real implementation, this would use the createP2PKLockedToken function
-      // For demo purposes, we'll just create a mock token
-      const mockToken: Token = {
-        token: `cashuA1${values.recipientPublicKey.substring(0, 10)}${Date.now()}`,
-        amount: values.amount,
-        lockTo: values.recipientPublicKey,
-      };
-      
-      setCreatedToken(mockToken);
-      
+      // Call real service to mint a P2PK-locked token
+      const token = await createP2PKLockedToken(values.amount, values.recipientPublicKey);
+      setCreatedToken(token);
       toast({
         title: 'Token Created',
-        description: `Successfully created a P2PK-locked token of ${values.amount} sats`,
+        description: `Successfully created a P2PK-locked token of ${token.amount} sats`,
       });
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to create token',
@@ -116,21 +113,25 @@ export default function CashuPage() {
   // Spend P2PK-locked token
   const spendToken = async (values: z.infer<typeof spendTokenFormSchema>) => {
     try {
-      // In a real implementation, this would use the spendP2PKLockedToken function
-      // For demo purposes, we'll just simulate a successful spend
-      
-      setSpendResult('success');
-      
-      toast({
-        title: 'Token Spent',
-        description: 'Successfully spent the P2PK-locked token',
-      });
-      
-      // Reset form
-      spendTokenForm.reset();
-    } catch (error) {
+      // Call real service to spend a P2PK-locked token
+      const success = await spendP2PKLockedToken(values.token);
+      if (success) {
+        setSpendResult('success');
+        toast({
+          title: 'Token Spent',
+          description: 'Successfully spent the P2PK-locked token',
+        });
+        spendTokenForm.reset();
+      } else {
+        setSpendResult('failure');
+        toast({
+          title: 'Error',
+          description: 'Failed to spend token',
+          variant: 'destructive',
+        });
+      }
+    } catch {
       setSpendResult('failure');
-      
       toast({
         title: 'Error',
         description: 'Failed to spend token',
@@ -159,7 +160,7 @@ export default function CashuPage() {
         title: 'Escrow Created',
         description: `Successfully created an escrow contract of ${values.amount} sats`,
       });
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to create escrow contract',
