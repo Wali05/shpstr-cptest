@@ -62,7 +62,6 @@ shopstr-payment-escrow/
 │   ├── app/             # Next.js app router pages
 │   ├── components/      # React components for each service
 │   │   ├── cashu/       # Cashu token components
-│   │   ├── dispute/     # Dispute resolution components
 │   │   ├── layout/      # Layout components
 │   │   ├── lightning/   # Lightning invoice components
 │   │   ├── nostr/       # Nostr messaging components
@@ -73,7 +72,6 @@ shopstr-payment-escrow/
 │       │   ├── nostr.ts      # Nostr NIP-17 implementation
 │       │   ├── cashu.ts      # Cashu P2PK implementation
 │       │   ├── lightning.ts  # Lightning HODL invoice implementation
-│       │   └── dispute.ts    # Dispute resolution service
 │       └── utils.ts     # Utility functions
 │
 ├── public/              # Static assets
