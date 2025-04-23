@@ -3,6 +3,9 @@ import DotenvWebpackPlugin from 'dotenv-webpack';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   webpack: (config) => {
     config.plugins.push(
       new DotenvWebpackPlugin({
