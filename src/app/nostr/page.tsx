@@ -1,456 +1,347 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { z } from 'zod';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { IconSend, IconKey, IconRefresh, IconMessage } from '@tabler/icons-react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Textarea } from '@/components/ui/textarea';
+import { IconLockSquare, IconEye, IconEyeOff, IconCode, IconRefresh } from '@tabler/icons-react';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  generateNostrKeys, 
-  importNostrKeys, 
-  sendGiftWrappedMessage, 
-  receiveGiftWrappedMessages,
-  subscribeToGiftWrappedMessages
-} from '@/lib/services/nostr';
-
-// Define form schema
-const sendMessageFormSchema = z.object({
-  recipientPublicKey: z.string().min(1, {
-    message: "Recipient's public key is required",
-  }),
-  message: z.string().min(1, {
-    message: "Message is required",
-  }),
-});
-
-const keyManagementFormSchema = z.object({
-  privateKey: z.string().optional(),
-});
+import { generateGiftWrappedMessageSimulation, GiftWrappedMessageSimulation } from '@/lib/services/nostr';
 
 export default function NostrPage() {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState('send');
-  const [keys, setKeys] = useState<{ privateKey: string; publicKey: string } | null>(null);
-  const [messages, setMessages] = useState<Array<{ message: string; sender: string; timestamp: number }>>([]);
-  const [isLoading, setIsLoading] = useState<{
-    keys: boolean;
-    send: boolean;
-    receive: boolean;
-  }>({ keys: false, send: false, receive: false });
+  const [customMessage, setCustomMessage] = useState("");
+  const [simulation, setSimulation] = useState<GiftWrappedMessageSimulation | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showResults, setShowResults] = useState(true);
+    
+  // Generate the simulation results
+  const generateSimulation = async () => {
+    if (!customMessage.trim()) {
+      toast({
+        title: 'Message Required',
+        description: 'Please enter a message to encrypt',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const result = await generateGiftWrappedMessageSimulation(customMessage);
+      setSimulation(result);
+      setShowResults(true);
+      
+      toast({
+        title: 'Simulation Generated',
+        description: 'Nostr gift-wrapped message simulation created successfully.',
+      });
+    } catch (error) {
+      console.error('Error generating simulation:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to generate simulation.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
-  // Check for saved keys in localStorage on initial load
-  useEffect(() => {
-    const savedPrivateKey = localStorage.getItem('nostr_private_key');
-    if (savedPrivateKey) {
-      try {
-        const importedKeys = importNostrKeys(savedPrivateKey);
-        setKeys(importedKeys);
-        toast({
-          title: 'Keys Loaded',
-          description: 'Your saved keys have been loaded successfully.',
-        });
-      } catch (error) {
-        console.error('Failed to load saved keys:', error);
-        localStorage.removeItem('nostr_private_key');
+  // Format a public key for display
+  const formatPublicKey = (publicKey: string) => {
+    if (!publicKey) return '';
+    return `${publicKey.substring(0, 8)}...${publicKey.substring(publicKey.length - 4)}`;
+  };
+
+  // Compare original and tampered content to highlight the difference
+  const highlightDifference = () => {
+    if (!simulation) return null;
+    
+    const originalContent = simulation.giftWrappedMsg.content;
+    const tamperedContent = simulation.tampered.giftWrappedMsg.content;
+    
+    // Find the position where the change was made
+    let diffIndex = -1;
+    for (let i = 0; i < originalContent.length; i++) {
+      if (i >= tamperedContent.length || originalContent[i] !== tamperedContent[i]) {
+        diffIndex = i;
+        break;
       }
     }
-  }, [toast]);
-  
-  // Subscribe to new messages when keys are available
-  useEffect(() => {
-    if (!keys) return;
     
-    // Set up subscription to new messages
-    const unsubscribe = subscribeToGiftWrappedMessages(
-      keys.privateKey,
-      (newMessage) => {
-        setMessages((prev) => [newMessage, ...prev]);
-        toast({
-          title: 'New Message',
-          description: `You received a new message from ${newMessage.sender.substring(0, 10)}...`,
-        });
-      }
+    if (diffIndex === -1) return null;
+    
+    // Create a display that shows the difference
+    const beforeChange = originalContent.substring(Math.max(0, diffIndex - 10), diffIndex);
+    const originalChar = originalContent.substring(diffIndex, diffIndex + 1);
+    const tamperedChar = tamperedContent.substring(diffIndex, diffIndex + 1);
+    const afterChange = originalContent.substring(diffIndex + 1, Math.min(originalContent.length, diffIndex + 11));
+    
+    return (
+      <div className="mt-4 border p-4 rounded-md bg-muted/30">
+        <h4 className="font-medium mb-2">Byte Change Comparison</h4>
+        <div className="text-xs font-mono">
+          <div className="flex gap-2 items-center mb-2">
+            <span className="font-semibold">Original:</span>
+            <span className="bg-muted p-1 rounded">{beforeChange}</span>
+            <span className="bg-green-200 p-1 rounded dark:bg-green-900">{originalChar}</span>
+            <span className="bg-muted p-1 rounded">{afterChange}</span>
+          </div>
+          <div className="flex gap-2 items-center">
+            <span className="font-semibold">Tampered:</span> 
+            <span className="bg-muted p-1 rounded">{beforeChange}</span>
+            <span className="bg-red-200 p-1 rounded dark:bg-red-900">{tamperedChar}</span>
+            <span className="bg-muted p-1 rounded">{afterChange}</span>
+          </div>
+        </div>
+        <p className="text-xs mt-2 text-muted-foreground">
+          Position: {diffIndex} of {originalContent.length} characters
+        </p>
+      </div>
     );
-    
-    // Cleanup subscription on unmount
-    return () => {
-      unsubscribe();
-    };
-  }, [keys, toast]);
-  
-  // Send message form
-  const sendMessageForm = useForm<z.infer<typeof sendMessageFormSchema>>({
-    resolver: zodResolver(sendMessageFormSchema),
-    defaultValues: {
-      recipientPublicKey: '',
-      message: '',
-    },
-  });
-  
-  // Key management form
-  const keyManagementForm = useForm<z.infer<typeof keyManagementFormSchema>>({
-    resolver: zodResolver(keyManagementFormSchema),
-    defaultValues: {
-      privateKey: '',
-    },
-  });
-  
-  // Generate new keys
-  const generateKeys = async () => {
-    setIsLoading({ ...isLoading, keys: true });
-    try {
-      const newKeys = generateNostrKeys();
-      setKeys(newKeys);
-      
-      // Save to localStorage for persistence
-      localStorage.setItem('nostr_private_key', newKeys.privateKey);
-      
-      toast({
-        title: 'New Keys Generated',
-        description: 'Your new keys have been generated. Keep your private key safe!',
-      });
-    } catch (error) {
-      console.error('Error generating keys:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to generate new keys.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading({ ...isLoading, keys: false });
-    }
-  };
-  
-  // Import keys from private key
-  const importKeys = async (privateKey: string) => {
-    setIsLoading({ ...isLoading, keys: true });
-    try {
-      const importedKeys = importNostrKeys(privateKey);
-      setKeys(importedKeys);
-      
-      // Save to localStorage for persistence
-      localStorage.setItem('nostr_private_key', importedKeys.privateKey);
-      
-      toast({
-        title: 'Keys Imported',
-        description: 'Your keys have been imported successfully.',
-      });
-    } catch (error) {
-      console.error('Error importing keys:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to import keys. Make sure your private key is valid.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading({ ...isLoading, keys: false });
-    }
-  };
-  
-  // Send message
-  const sendMessage = async (values: z.infer<typeof sendMessageFormSchema>) => {
-    if (!keys) {
-      toast({
-        title: 'Error',
-        description: 'You need to generate or import keys first.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    
-    setIsLoading({ ...isLoading, send: true });
-    
-    try {
-      await sendGiftWrappedMessage(
-        keys.privateKey,
-        values.recipientPublicKey,
-        values.message
-      );
-      
-      toast({
-        title: 'Message Sent',
-        description: 'Your gift-wrapped message has been sent successfully.',
-      });
-      
-      // Reset form
-      sendMessageForm.reset();
-    } catch (error) {
-      console.error('Error sending message:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to send message. Check recipient public key.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading({ ...isLoading, send: false });
-    }
-  };
-  
-  // Receive messages
-  const refreshMessages = async () => {
-    if (!keys) {
-      toast({
-        title: 'Error',
-        description: 'You need to generate or import keys first.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    
-    setIsLoading({ ...isLoading, receive: true });
-    
-    try {
-      // Get messages since one week ago (604800 seconds)
-      const oneWeekAgo = Math.floor(Date.now() / 1000) - 604800;
-      const receivedMessages = await receiveGiftWrappedMessages(
-        keys.privateKey,
-        oneWeekAgo,
-        50
-      );
-      
-      setMessages(receivedMessages);
-      
-      toast({
-        title: 'Messages Refreshed',
-        description: `Received ${receivedMessages.length} messages.`,
-      });
-    } catch (error) {
-      console.error('Error receiving messages:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to retrieve messages.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading({ ...isLoading, receive: false });
-    }
-  };
-  
-  // Submit key management form
-  const onKeyManagementSubmit = (values: z.infer<typeof keyManagementFormSchema>) => {
-    if (values.privateKey) {
-      importKeys(values.privateKey);
-    } else {
-      generateKeys();
-    }
-  };
-  
-  // Format npub for display
-  const formatNpub = (pubkey: string) => {
-    if (pubkey.startsWith('npub')) {
-      return pubkey;
-    }
-    return `${pubkey.substring(0, 8)}...${pubkey.substring(pubkey.length - 4)}`;
   };
   
   return (
     <div className="container mx-auto py-6">
-      <h1 className="text-3xl font-bold mb-6">Gift-wrapped Nostr Messages</h1>
+      <h1 className="text-3xl font-bold mb-6">Nostr Gift-Wrapped Messages</h1>
       <p className="text-muted-foreground mb-8">
-        Send and receive encrypted messages using NIP-17 protocol.
+        This page demonstrates a simulation of Nostr gift-wrapped messaging, showcasing the encryption and security process.
       </p>
       
-      {!keys && (
-        <Alert className="mb-8">
-          <IconKey className="h-4 w-4" />
-          <AlertTitle>No Keys Found</AlertTitle>
-          <AlertDescription>
-            You need to generate or import Nostr keys to send and receive messages.
-          </AlertDescription>
-        </Alert>
-      )}
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <Card className="md:col-span-2">
+      <Card className="mb-8">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <IconKey size={20} />
-              Key Management
+            <IconLockSquare size={20} />
+            Nostr Message Simulation
             </CardTitle>
             <CardDescription>
-              Generate new Nostr keys or import existing ones
+            Generate a new simulation showing the gift-wrapped message process
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Form {...keyManagementForm}>
-              <form onSubmit={keyManagementForm.handleSubmit(onKeyManagementSubmit)} className="space-y-4">
-                <FormField
-                  control={keyManagementForm.control}
-                  name="privateKey"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Private Key (optional)</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Enter your private key to import"
-                          {...field}
+          <div className="space-y-4">
+            <div className="flex flex-col gap-2">
+              <label className="font-medium">Enter Message</label>
+              <Textarea 
+                value={customMessage}
+                onChange={(e) => setCustomMessage(e.target.value)}
+                placeholder="Enter your message to encrypt"
+                className="min-h-[100px]"
                         />
-                      </FormControl>
-                      <FormDescription>
-                        Leave empty to generate new keys
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Button 
-                    type="submit" 
-                    className="flex items-center gap-2"
-                    disabled={isLoading.keys}
-                  >
-                    <IconKey size={16} />
-                    {isLoading.keys ? 'Processing...' : keyManagementForm.getValues('privateKey') ? 'Import Keys' : 'Generate New Keys'}
-                  </Button>
-                </div>
-              </form>
-            </Form>
+              <p className="text-sm text-muted-foreground">
+                This message will be encrypted using the Nostr gift-wrapped protocol
+              </p>
+            </div>
             
-            {keys && (
-              <div className="mt-4 space-y-2">
-                <div>
-                  <span className="font-medium">Your Public Key:</span>
-                  <code className="ml-2 p-1 bg-muted rounded text-xs">{keys.publicKey}</code>
-                </div>
-                <div>
-                  <span className="font-medium">Your Private Key:</span>
-                  <code className="ml-2 p-1 bg-muted rounded text-xs">
-                    {keys.privateKey.substring(0, 4)}...{keys.privateKey.substring(keys.privateKey.length - 4)}
+                  <Button 
+              onClick={generateSimulation}
+              disabled={isLoading}
+              className="w-full"
+            >
+              {isLoading ? 'Generating...' : 'Generate Simulation'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+      
+      {simulation && showResults && (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-bold">Nostr Results</h2>
+            <Button variant="outline" onClick={() => setShowResults(false)}>
+              Hide Nostr Results
+            </Button>
+          </div>
+          
+          <Card>
+            <CardHeader>
+              <CardTitle>Original Message</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="p-4 bg-muted rounded-md whitespace-pre-wrap">{simulation.originalMessage}</p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader>
+              <CardTitle>Decrypted Content</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {simulation.decryptedContent ? (
+                <p className="p-4 bg-muted rounded-md whitespace-pre-wrap">{simulation.decryptedContent}</p>
+              ) : (
+                <Alert>
+                  <AlertTitle>Decryption Failed</AlertTitle>
+                  <AlertDescription>The message could not be decrypted.</AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle>Keys</CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => setShowDetails(!showDetails)}>
+                {showDetails ? <IconEyeOff size={16} /> : <IconEye size={16} />}
+                {showDetails ? ' Hide Details' : ' Show Details'}
+                  </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="flex justify-between border-b pb-2">
+                  <span className="font-medium">Sender</span>
+                  <code className="text-xs bg-muted p-1 rounded">
+                    {formatPublicKey(simulation.keys.sender.publicKey)}
                   </code>
-                  <span className="text-xs text-muted-foreground ml-2">(Keep this secret!)</span>
+                </div>
+                <div className="flex justify-between border-b pb-2">
+                  <span className="font-medium">Receiver</span>
+                  <code className="text-xs bg-muted p-1 rounded">
+                    {formatPublicKey(simulation.keys.receiver.publicKey)}
+                  </code>
+                </div>
+                <div className="flex justify-between pb-2">
+                  <span className="font-medium">Wrapper</span>
+                  <code className="text-xs bg-muted p-1 rounded">
+                    {formatPublicKey(simulation.keys.wrapper.publicKey)}
+                  </code>
                 </div>
               </div>
-            )}
+            </CardContent>
+          </Card>
+          
+          {showDetails && (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Direct Message (Kind 14)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <pre className="p-4 bg-muted rounded-md overflow-auto text-xs">
+                    {JSON.stringify(simulation.directMsg, null, 2)}
+                  </pre>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>Sealed Message (Kind 13)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <pre className="p-4 bg-muted rounded-md overflow-auto text-xs">
+                    {JSON.stringify(simulation.sealedMsg, null, 2)}
+                  </pre>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>Gift-Wrapped Message (Kind 1059)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <pre className="p-4 bg-muted rounded-md overflow-auto text-xs">
+                    {JSON.stringify(simulation.giftWrappedMsg, null, 2)}
+                  </pre>
           </CardContent>
         </Card>
         
-        <Tabs defaultValue={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid grid-cols-2 mb-4">
-            <TabsTrigger value="send">Send Message</TabsTrigger>
-            <TabsTrigger value="receive">Receive Messages</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="send">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Unwrapped Message</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <pre className="p-4 bg-muted rounded-md overflow-auto text-xs">
+                    {JSON.stringify(simulation.unwrappedMsg, null, 2)}
+                  </pre>
+                </CardContent>
+              </Card>
+              
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <IconSend size={20} />
-                  Send Gift-wrapped Message
-                </CardTitle>
-                <CardDescription>
-                  Send an encrypted message to another Nostr user
-                </CardDescription>
+                  <CardTitle>Tamper Test</CardTitle>
               </CardHeader>
               <CardContent>
-                <Form {...sendMessageForm}>
-                  <form onSubmit={sendMessageForm.handleSubmit(sendMessage)} className="space-y-4">
-                    <FormField
-                      control={sendMessageForm.control}
-                      name="recipientPublicKey"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Recipient Public Key</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="npub1... or hex key"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  <div className="space-y-4">
+                    <Alert>
+                      <IconCode className="h-4 w-4" />
+                      <AlertTitle>Tampered Message</AlertTitle>
+                      <AlertDescription>
+                        The last byte of the wrapped event content was changed to simulate tampering.
+                        This demonstrates how even a single-byte change breaks the cryptographic integrity.
+                      </AlertDescription>
+                    </Alert>
                     
-                    <FormField
-                      control={sendMessageForm.control}
-                      name="message"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Message</FormLabel>
-                          <FormControl>
-                            <Textarea
-                              placeholder="Enter your message here..."
-                              className="min-h-[100px]"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    {highlightDifference()}
                     
-                    <Button 
-                      type="submit" 
-                      className="w-full"
-                      disabled={isLoading.send || !keys}
-                    >
-                      {isLoading.send ? 'Sending...' : 'Send Message'}
-                    </Button>
-                  </form>
-                </Form>
+                    <div className="border p-4 rounded-md">
+                      <h4 className="font-medium mb-2">Unwrap Result</h4>
+                      {simulation.tampered.unwrappedMsg === null ? (
+                        <p className="text-destructive">Failed to unwrap (Expected - Cryptographic verification failed)</p>
+                      ) : (
+                        <pre className="p-4 bg-muted rounded-md overflow-auto text-xs">
+                          {JSON.stringify(simulation.tampered.unwrappedMsg, null, 2)}
+                        </pre>
+                      )}
+                    </div>
+                    
+                    <div className="border p-4 rounded-md">
+                      <h4 className="font-medium mb-2">Decrypt Result</h4>
+                      {simulation.tampered.decryptedContent === null ? (
+                        <p className="text-destructive">Failed to decrypt (Expected - Cryptographic verification failed)</p>
+                      ) : (
+                        <pre className="p-4 bg-muted rounded-md overflow-auto text-xs">
+                          {simulation.tampered.decryptedContent}
+                        </pre>
+                      )}
+                    </div>
+                  </div>
               </CardContent>
             </Card>
-          </TabsContent>
           
-          <TabsContent value="receive">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <IconMessage size={20} />
-                  Received Messages
-                </CardTitle>
-                <CardDescription>
-                  View encrypted messages sent to you
-                </CardDescription>
+                  <CardTitle>Full Simulation Details</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="mb-4">
                   <Button 
-                    onClick={refreshMessages}
                     variant="outline"
-                    className="flex items-center gap-2"
-                    disabled={isLoading.receive || !keys}
+                    className="w-full"
+                    onClick={() => {
+                      const el = document.createElement('textarea');
+                      el.value = JSON.stringify(simulation, null, 2);
+                      document.body.appendChild(el);
+                      el.select();
+                      document.execCommand('copy');
+                      document.body.removeChild(el);
+                      
+                      toast({
+                        title: 'Copied to Clipboard',
+                        description: 'Full simulation details copied to clipboard.',
+                      });
+                    }}
                   >
-                    <IconRefresh size={16} />
-                    {isLoading.receive ? 'Loading...' : 'Refresh Messages'}
+                    Copy Full Simulation JSON
                   </Button>
-                </div>
-                
-                <div className="space-y-4">
-                  {messages.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-8">
-                      No messages found. Click refresh to check for new messages.
-                    </p>
-                  ) : (
-                    messages.map((msg, index) => (
-                      <div key={index} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="text-xs font-medium text-muted-foreground">
-                            From: {formatNpub(msg.sender)}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(msg.timestamp * 1000).toLocaleString()}
-                          </span>
-                        </div>
-                        <p className="whitespace-pre-wrap break-words">{msg.message}</p>
-                      </div>
-                    ))
-                  )}
-                </div>
               </CardContent>
             </Card>
-          </TabsContent>
-        </Tabs>
+            </>
+          )}
+          
+          <div className="flex justify-center mt-8">
+            <Button 
+              onClick={generateSimulation}
+              className="flex items-center gap-2"
+              variant="outline"
+            >
+              <IconRefresh size={16} />
+              Generate New Simulation
+            </Button>
+          </div>
       </div>
+      )}
     </div>
   );
 } 

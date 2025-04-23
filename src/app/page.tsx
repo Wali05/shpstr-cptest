@@ -12,7 +12,7 @@ export default function Page() {
       </div>
       
       <div className="mt-24 container mx-auto px-4 text-center">
-        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
           <div className="bg-card p-6 rounded-lg border shadow-sm hover:shadow-md transition-all duration-300">
             <h3 className="text-2xl font-bold mb-4">Encrypted Messaging</h3>
             <p className="text-muted-foreground mb-4">
@@ -48,19 +48,6 @@ export default function Page() {
             <Link href="/lightning" className="inline-block">
               <Button className="mt-2 transition-all duration-300 hover:bg-opacity-90 hover:shadow-lg hover:scale-105">
                 Explore Lightning →
-              </Button>
-            </Link>
-          </div>
-          
-          <div className="bg-card p-6 rounded-lg border shadow-sm hover:shadow-md transition-all duration-300">
-            <h3 className="text-2xl font-bold mb-4">Dispute Resolution</h3>
-            <p className="text-muted-foreground mb-4">
-              Fair and transparent dispute resolution system for buyers and sellers.
-              Neutral third-party arbitration when things don&apos;t go as planned.
-            </p>
-            <Link href="/disputes" className="inline-block">
-              <Button className="mt-2 transition-all duration-300 hover:bg-opacity-90 hover:shadow-lg hover:scale-105">
-                Dispute Center →
               </Button>
             </Link>
           </div>

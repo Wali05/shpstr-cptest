@@ -1,340 +1,290 @@
 /**
- * Lightning Network service for HODL invoices
+ * Lightning Network service for HODL invoices - Simulation
  * 
- * This implements HODL invoice functionality for the Lightning Network.
+ * This implements a complete simulation of HODL invoice functionality for Lightning Network
+ * without requiring an actual lightning node connection.
  */
 
 // Define interfaces
 export interface HodlInvoice {
+  id: string;
   paymentRequest: string;
-  preimage?: string; // Known only to the merchant
+  preimage: string;
   hash: string;
   amount: number;
-  expirySeconds: number;
-  createdAt: number;
   description: string;
-  status: 'pending' | 'settled' | 'canceled' | 'expired';
+  status: 'pending' | 'held' | 'settled' | 'canceled';
+  createdAt: number;
+  expiresAt: number;
 }
 
-export interface PaymentStatus {
-  status: 'success' | 'failed' | 'pending';
-  preimage?: string;
-  error?: string;
+// Interface for preimage and hash generation result
+export interface PreimageAndHash {
+  preimage: string;
+  hash: string;
 }
 
-// Get Lightning Network configuration from environment variables
-const LIGHTNING_NODE_URL = process.env.NEXT_PUBLIC_LIGHTNING_NODE_URL || '';
-const LIGHTNING_MACAROON = process.env.NEXT_PUBLIC_LIGHTNING_MACAROON || '';
-// Cert is used for secure connections in production
-// const LIGHTNING_CERT = process.env.NEXT_PUBLIC_LIGHTNING_CERT || '';
+// Interface for complete simulation result
+export interface SimulationResult {
+  preimageAndHash: PreimageAndHash;
+  originalInvoice: HodlInvoice;
+  heldInvoice: HodlInvoice;
+  settledInvoice: HodlInvoice;
+  failedSettlement: HodlInvoice;
+  canceledInvoice: HodlInvoice;
+  expiredInvoice: HodlInvoice;
+}
+
+/**
+ * Generate a preimage and hash for a HODL invoice
+ */
+export function generatePreimageAndHash(): PreimageAndHash {
+  // Create a random preimage (32 bytes)
+  const preimageArray = new Uint8Array(32);
+  window.crypto.getRandomValues(preimageArray);
+  const preimage = Array.from(preimageArray, byte => 
+    byte.toString(16).padStart(2, '0')).join('');
+    
+  // For synchronous usage, just return the preimage and compute a temporary hash
+  // This will be replaced by the actual SHA-256 hash in the simulateHodlInvoice function
+  return { 
+    preimage, 
+    hash: preimage.split('').reverse().join('') // Temporary hash for synchronous usage
+  };
+}
+
+/**
+ * Hash a preimage using SHA-256
+ */
+export async function hashPreimage(preimage: string): Promise<PreimageAndHash> {
+  try {
+    // Convert hex preimage to bytes
+    const preimageBytes = new Uint8Array(preimage.match(/.{1,2}/g)!.map(byte => 
+      parseInt(byte, 16)));
+    
+    // Use the Web Crypto API to create a SHA-256 hash
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', preimageBytes);
+    
+    // Convert the hash to a hex string
+    const hash = Array.from(new Uint8Array(hashBuffer), byte => 
+      byte.toString(16).padStart(2, '0')).join('');
+    
+    return { preimage, hash };
+  } catch (error) {
+    console.error('Failed to hash preimage:', error);
+    throw new Error('Failed to hash preimage');
+  }
+}
+
+/**
+ * Generate a unique invoice ID
+ */
+function generateInvoiceId(): string {
+  return Array.from(
+    window.crypto.getRandomValues(new Uint8Array(16)),
+    byte => byte.toString(16).padStart(2, '0')
+  ).join('');
+}
 
 /**
  * Create a HODL invoice
  * 
- * A HODL invoice is a Lightning invoice where the merchant doesn't
- * immediately release the preimage upon payment. Instead, the payment
- * remains in a pending state until the merchant explicitly settles by
- * revealing the preimage.
+ * A HODL invoice is a Lightning invoice where the payment is held until
+ * the merchant explicitly settles it by revealing the preimage.
  */
-export async function createHodlInvoice(
+export function createHodlInvoice(
   amount: number,
   description: string,
+  hash: string,
   expirySeconds: number = 86400 // 24 hours
-): Promise<HodlInvoice> {
-  try {
-    // Generate a random preimage (32 bytes)
-    const preimage = Array.from(
-      window.crypto.getRandomValues(new Uint8Array(32)),
-      (byte) => byte.toString(16).padStart(2, '0')
-    ).join('');
+): HodlInvoice {
+  const id = generateInvoiceId();
+  const now = Math.floor(Date.now() / 1000);
     
-    // Calculate SHA-256 hash of preimage
-    const encoder = new TextEncoder();
-    const data = encoder.encode(preimage);
-    const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
-    const hash = Array.from(
-      new Uint8Array(hashBuffer),
-      (byte) => byte.toString(16).padStart(2, '0')
-    ).join('');
-    
-    // Make API request to create a HODL invoice
-    const requestBody = {
-      value: amount,
-      memo: description,
-      hash: hash, // The payment hash
-      expiry: expirySeconds,
-      hodl: true, // Specify that this is a HODL invoice
-    };
-    
-    const response = await fetch(`${LIGHTNING_NODE_URL}/hodlinvoice`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${LIGHTNING_MACAROON}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`Failed to create HODL invoice: ${errorData}`);
-    }
-    
-    const invoiceData = await response.json();
-    console.log('Created HODL invoice:', invoiceData);
-    
-    // Save the preimage for later settlement
-    // In a production environment, you would store this securely
-    localStorage.setItem(`preimage_${hash}`, preimage);
+  // Create a mock payment request
+  const paymentRequest = `lnbcrt${amount}p1${hash.substring(0, 12)}s${id.substring(0, 8)}`;
     
     return {
-      paymentRequest: invoiceData.payment_request,
-      preimage: preimage, // Save for merchant use only
-      hash: hash,
-      amount: amount,
-      expirySeconds: expirySeconds,
-      createdAt: Math.floor(Date.now() / 1000),
-      description: description,
-      status: 'pending'
-    };
-  } catch (error) {
-    console.error('Failed to create HODL invoice:', error);
-    throw new Error('Failed to create HODL invoice');
-  }
-}
-
-/**
- * Pay a HODL invoice
- * 
- * This simulates a buyer paying a HODL invoice.
- * The payment will remain in a pending state until
- * the preimage is revealed by the merchant.
- */
-export async function payHodlInvoice(
-  paymentRequest: string
-): Promise<PaymentStatus> {
-  try {
-    // Make API request to pay the invoice
-    const requestBody = {
-      payment_request: paymentRequest,
-    };
-    
-    const response = await fetch(`${LIGHTNING_NODE_URL}/pay`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${LIGHTNING_MACAROON}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`Failed to pay HODL invoice: ${errorData}`);
-    }
-    
-    const paymentData = await response.json();
-    console.log('Payment initiated:', paymentData);
-    
-    // In a real HODL invoice implementation, the payment will be pending
-    // until the merchant settles it by revealing the preimage
-    
-    return {
+    id,
+    paymentRequest,
+    preimage: '', // Preimage is not revealed yet
+    hash,
+    amount,
+    description,
       status: 'pending',
-    };
-  } catch (error) {
-    console.error('Failed to pay HODL invoice:', error);
-    return {
-      status: 'failed',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    };
-  }
+    createdAt: now,
+    expiresAt: now + expirySeconds
+  };
 }
 
 /**
- * Settle a HODL invoice
- * 
- * This is done by the merchant to release the payment
- * by revealing the preimage. This completes the transaction
- * and allows the buyer to claim the payment.
+ * Pay a HODL invoice (simulate payment being held)
+ */
+export function payHodlInvoice(invoice: HodlInvoice): HodlInvoice {
+  // Check if the invoice is expired
+  const now = Math.floor(Date.now() / 1000);
+  if (now > invoice.expiresAt) {
+    throw new Error('Invoice has expired');
+}
+
+  // Check if the invoice is already settled or canceled
+  if (invoice.status === 'settled' || invoice.status === 'canceled') {
+    throw new Error(`Invoice cannot be paid: status is ${invoice.status}`);
+  }
+  
+  // Return a new invoice with status set to 'held'
+  return {
+    ...invoice,
+    status: 'held'
+  };
+}
+
+/**
+ * Settle a HODL invoice by revealing the preimage
  */
 export async function settleHodlInvoice(
-  invoice: HodlInvoice
-): Promise<boolean> {
+  invoice: HodlInvoice, 
+  providedPreimage: string
+): Promise<HodlInvoice> {
+  // Check if the invoice is expired
+  const now = Math.floor(Date.now() / 1000);
+  if (now > invoice.expiresAt) {
+    throw new Error('Invoice has expired and cannot be settled');
+  }
+  
+  // Check if the invoice is in a state that can be settled
+  if (invoice.status !== 'held') {
+    throw new Error(`Invoice cannot be settled: status is ${invoice.status}`);
+    }
+    
   try {
-    // Retrieve the preimage - in a real app, you'd get this from secure storage
-    const preimage = invoice.preimage || localStorage.getItem(`preimage_${invoice.hash}`);
+    // Verify the provided preimage by hashing it
+    const { hash } = await hashPreimage(providedPreimage);
     
-    if (!preimage) {
-      throw new Error('Preimage not found for this invoice');
+    // Check if the hash matches
+    if (hash === invoice.hash) {
+      // If the hash matches, settle the invoice
+      return {
+        ...invoice,
+        status: 'settled',
+        preimage: providedPreimage
+      };
+    } else {
+      // If the hash doesn't match, keep the invoice in 'held' state
+      console.warn('Settlement failed: Provided preimage does not match hash');
+      return invoice;
     }
-    
-    // Make API request to settle the invoice
-    const requestBody = {
-      hash: invoice.hash,
-      preimage: preimage,
-    };
-    
-    const response = await fetch(`${LIGHTNING_NODE_URL}/hodlinvoice/settle`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${LIGHTNING_MACAROON}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`Failed to settle HODL invoice: ${errorData}`);
-    }
-    
-    console.log('Invoice settled successfully');
-    
-    // Update the invoice status
-    invoice.status = 'settled';
-    
-    return true;
   } catch (error) {
-    console.error('Failed to settle HODL invoice:', error);
-    throw new Error('Failed to settle HODL invoice');
+    console.error('Error verifying preimage:', error);
+    throw new Error('Failed to verify preimage');
   }
 }
 
 /**
  * Cancel a HODL invoice
- * 
- * This is done by the merchant to cancel a pending invoice
- * that should no longer be valid.
  */
-export async function cancelHodlInvoice(
-  invoice: HodlInvoice
-): Promise<boolean> {
-  try {
-    // Make API request to cancel the invoice
-    const requestBody = {
-      hash: invoice.hash,
-    };
-    
-    const response = await fetch(`${LIGHTNING_NODE_URL}/hodlinvoice/cancel`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${LIGHTNING_MACAROON}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`Failed to cancel HODL invoice: ${errorData}`);
-    }
-    
-    console.log('Invoice canceled successfully');
-    
-    // Update the invoice status
-    invoice.status = 'canceled';
-    
-    return true;
-  } catch (error) {
-    console.error('Failed to cancel HODL invoice:', error);
-    throw new Error('Failed to cancel HODL invoice');
+export function cancelHodlInvoice(invoice: HodlInvoice): HodlInvoice {
+  // Check if the invoice can be canceled
+  if (invoice.status === 'settled') {
+    throw new Error('Invoice cannot be canceled: already settled');
   }
-}
-
-/**
- * Check the status of a HODL invoice
- */
-export async function checkHodlInvoiceStatus(
-  hash: string
-): Promise<'pending' | 'settled' | 'canceled' | 'expired'> {
-  try {
-    // Make API request to check invoice status
-    const response = await fetch(`${LIGHTNING_NODE_URL}/hodlinvoice/${hash}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${LIGHTNING_MACAROON}`,
-      },
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.text();
-      throw new Error(`Failed to check HODL invoice status: ${errorData}`);
-    }
-    
-    const invoiceData = await response.json();
-    console.log('Invoice status:', invoiceData);
-    
-    // Map the status from the API to our status types
-    if (invoiceData.settled) {
-      return 'settled';
-    } else if (invoiceData.canceled) {
-      return 'canceled';
-    } else if (invoiceData.expired) {
-      return 'expired';
-    } else {
-      return 'pending';
-    }
-  } catch (error) {
-    console.error('Failed to check HODL invoice status:', error);
-    throw new Error('Failed to check HODL invoice status');
-  }
-}
-
-/**
- * Create an automated HODL invoice settlement service
- * 
- * This service would run in the background and automatically
- * settle HODL invoices when certain conditions are met
- * (e.g., order status changed to shipped).
- */
-export async function createAutomatedSettlementService(
-  orderCompletionCallback: (hash: string) => Promise<boolean>
-): Promise<{ cleanup: () => void; addInvoice: (invoice: HodlInvoice) => void }> {
-  // Keep track of invoices to monitor
-  const monitoredInvoices: { 
-    [hash: string]: { 
-      invoice: HodlInvoice, 
-      checkInterval: NodeJS.Timeout 
-    } 
-  } = {};
   
-  // Function to add an invoice to monitoring
-  const addInvoiceToMonitoring = (invoice: HodlInvoice) => {
-    // Check every minute if the order has been completed
-    const checkInterval = setInterval(async () => {
-      try {
-        // Check if order is complete
-        const isComplete = await orderCompletionCallback(invoice.hash);
-        
-        if (isComplete) {
-          // Settle the invoice
-          await settleHodlInvoice(invoice);
-          
-          // Stop monitoring this invoice
-          clearInterval(monitoredInvoices[invoice.hash].checkInterval);
-          delete monitoredInvoices[invoice.hash];
-        }
-      } catch (error) {
-        console.error('Error in automated settlement service:', error);
-      }
-    }, 60000); // Check every minute
-    
-    // Add to monitored invoices
-    monitoredInvoices[invoice.hash] = {
-      invoice,
-      checkInterval
-    };
-  };
-  
-  // Return functions for cleanup and adding invoices
+  // Return a new invoice with status set to 'canceled'
   return {
-    cleanup: () => {
-      // Clear all intervals
-      Object.values(monitoredInvoices).forEach(({ checkInterval }) => {
-        clearInterval(checkInterval);
-      });
-    },
-    addInvoice: addInvoiceToMonitoring
+    ...invoice,
+    status: 'canceled'
   };
+}
+
+/**
+ * Check if an invoice is expired
+ */
+export function isInvoiceExpired(invoice: HodlInvoice): boolean {
+  const now = Math.floor(Date.now() / 1000);
+  return now > invoice.expiresAt;
+    }
+    
+/**
+ * Create a simulated expired invoice
+ */
+export function createExpiredInvoice(invoice: HodlInvoice): HodlInvoice {
+  const now = Math.floor(Date.now() / 1000);
+  
+  return {
+    ...invoice,
+    expiresAt: now - 100 // Expired 100 seconds ago
+  };
+}
+
+/**
+ * Run a complete HODL invoice simulation lifecycle
+ */
+export async function simulateHodlInvoice(
+  amount: number = 5000,
+  description: string = "Shopstr order #" + Math.floor(Math.random() * 10000)
+): Promise<SimulationResult> {
+  try {
+    // 1. Generate preimage and hash
+    const initialPreimageAndHash = generatePreimageAndHash();
+    // Get the proper hash using the crypto API
+    const { preimage, hash } = await hashPreimage(initialPreimageAndHash.preimage);
+    
+    // 2. Create the original invoice
+    const originalInvoice = createHodlInvoice(amount, description, hash);
+    
+    // 3. Simulate payment (invoice is held)
+    const heldInvoice = payHodlInvoice(originalInvoice);
+    
+    // 4. Simulate successful settlement
+    const settledInvoice = await settleHodlInvoice(heldInvoice, preimage);
+    
+    // 5. Simulate failed settlement with incorrect preimage
+    const wrongPreimage = Array.from(
+      window.crypto.getRandomValues(new Uint8Array(32)),
+      byte => byte.toString(16).padStart(2, '0')
+    ).join('');
+    const failedSettlement = await settleHodlInvoice(heldInvoice, wrongPreimage);
+    
+    // 6. Simulate cancellation
+    const canceledInvoice = cancelHodlInvoice(heldInvoice);
+    
+    // 7. Simulate an expired invoice
+    const expiredInvoice = createExpiredInvoice(heldInvoice);
+    
+    // Return the complete simulation result
+    return {
+      preimageAndHash: { preimage, hash },
+      originalInvoice,
+      heldInvoice,
+      settledInvoice,
+      failedSettlement,
+      canceledInvoice,
+      expiredInvoice
+    };
+  } catch (error) {
+    console.error('HODL invoice simulation failed:', error);
+    throw new Error('HODL invoice simulation failed');
+  }
+}
+
+/**
+ * Format a timestamp as a human-readable date
+ */
+export function formatTimestamp(timestamp: number): string {
+  return new Date(timestamp * 1000).toLocaleString();
+}
+
+/**
+ * Format a time duration in seconds as a human-readable string
+ */
+export function formatDuration(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds} seconds`;
+  } else if (seconds < 3600) {
+    return `${Math.floor(seconds / 60)} minutes`;
+  } else if (seconds < 86400) {
+    return `${Math.floor(seconds / 3600)} hours`;
+  } else {
+    return `${Math.floor(seconds / 86400)} days`;
+  }
 } 

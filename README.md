@@ -1,4 +1,4 @@
-# 🛡️ Shopstr Payment Escrow System Competency Test
+# 🛡️ Shopstr Competency Test
 
 A Next.js application for secure payment escrow using Bitcoin technologies, enabling trustless transactions between buyers and merchants with Nostr messaging and dispute resolution.
 
@@ -20,57 +20,46 @@ A Next.js application for secure payment escrow using Bitcoin technologies, enab
 - Tailwind CSS with Shadcn UI
 - React Hook Form with Zod validation
 
-## 🔧 Setup
+## 📋 Installation Guide
 
 ### Prerequisites
 
 - Node.js 18.0.0 or higher
 - npm or yarn package manager
-- Access to Nostr relays
-- Access to a Cashu mint
-- LND node for Lightning features (optional)
+- Git
 
-### 🛠 Environment Variables
+### Step 1: Clone the Repository
 
-Create a `.env` file in the competency-test directory:
-
-```
-# API Configuration
-NEXT_PUBLIC_API_URL=http://localhost:3000/api
-
-# Nostr Configuration
-NEXT_PUBLIC_NOSTR_RELAYS=wss://relay.damus.io,wss://nos.lol
-NEXT_PUBLIC_NOSTR_RELAY_URL=wss://relay.damus.io
-NEXT_PUBLIC_NOSTR_MERCHANT_PUBKEY=npub1...
-NEXT_PUBLIC_NOSTR_ARBITER_PUBKEY=npub1...
-
-# Cashu Configuration
-NEXT_PUBLIC_CASHU_MINT_URL=https://8333.space:3338
-NEXT_PUBLIC_CASHU_MINT_PUBKEY=02...
-
-# Lightning Configuration
-NEXT_PUBLIC_LIGHTNING_NODE_URL=https://localhost:10009
-NEXT_PUBLIC_LIGHTNING_MACAROON=base64_encoded_macaroon
-
-# Authentication
-NEXT_PUBLIC_AUTH_SECRET=your-auth-secret-here
-
-# Feature Flags
-NEXT_PUBLIC_ENABLE_DISPUTES=true
-NEXT_PUBLIC_ENABLE_HODL_INVOICES=true
+```bash
+git clone https://github.com/yourusername/shopstr-payment-escrow.git
+cd shopstr-payment-escrow
 ```
 
-## Components
+### Step 2: Install Dependencies
 
-- **Nostr Service**: Handles encrypted messaging using Nostr protocol
-- **Cashu Service**: Manages P2PK token creation and verification
-- **Lightning Service**: Handles HODL invoice creation/settlement
-- **Dispute Service**: Manages dispute flow and resolution
+```bash
+npm install
+```
 
-## Project Structure
+### Step 3: Run Development Server
+
+```bash
+npm run dev
+```
+
+The application will be available at [http://localhost:3000](http://localhost:3000).
+
+### Step 5: Build for Production (Optional)
+
+```bash
+npm run build
+npm run start
+```
+
+## 🧩 Project Structure
 
 ```
-competency-test/
+shopstr-payment-escrow/
 ├── src/                 
 │   ├── app/             # Next.js app router pages
 │   ├── components/      # React components for each service
@@ -80,6 +69,7 @@ competency-test/
 │   │   ├── lightning/   # Lightning invoice components
 │   │   ├── nostr/       # Nostr messaging components
 │   │   └── ui/          # Shadcn UI components
+│   ├── hooks/           # Custom React hooks
 │   └── lib/             # Core functionality
 │       ├── services/    # Service integrations
 │       │   ├── nostr.ts      # Nostr NIP-17 implementation
@@ -88,54 +78,13 @@ competency-test/
 │       │   └── dispute.ts    # Dispute resolution service
 │       └── utils.ts     # Utility functions
 │
-└── .env                 # Environment variables
+├── public/              # Static assets
+├── types/               # TypeScript type definitions
+├── package.json         # Dependencies and scripts
+├── tsconfig.json        # TypeScript configuration
+└── .env                 # Environment variables (create this file)
 ```
 
-## Features
-
-- Gift-wrapped Nostr messaging with NIP-17
-- P2PK-locked Cashu tokens based on NUT-11
-- HODL invoices for time-locked payments
-- Multi-signature escrow for token spending
-- Third-party dispute arbitration
-- Real-time communication
-
-## Setup Instructions
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/yourusername/shopstr-payment-escrow.git
-cd shopstr-payment-escrow
-```
-
-### 2. Install Dependencies
-
-```bash
-cd competency-test
-npm install
-```
-
-### 3. Configure Environment
-
-```bash
-cp .env.example .env
-# Edit the .env file with your service details
-```
-
-### 4. Start Development Server
-
-```bash
-npm run dev
-```
-
-## Development
-
-- Frontend runs on port 3000
-- Access the application at http://localhost:3000
-- Gift Messages, P2PK Tokens, HODL Invoices, and Disputes accessible from navbar
-- Real-time updates from Nostr relays when available
-
-## License
+## 📄 License
 
 MIT 

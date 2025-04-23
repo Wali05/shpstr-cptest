@@ -1,38 +1,61 @@
-import { finalizeEvent, getPublicKey, nip04, SimplePool, type Event, type Filter } from 'nostr-tools';
+import { getPublicKey, nip04, Event, finalizeEvent } from 'nostr-tools';
+import { randomBytes } from 'crypto';
 
-// Define available relays from environment variables
-const relays = process.env.NEXT_PUBLIC_NOSTR_RELAYS?.split(',') || [
-  'wss://relay.damus.io',
-  'wss://nos.lol',
-  'wss://relay.nostr.band',
-];
+/**
+ * Simulated implementation of Nostr gift-wrapped messages
+ * This is a mock implementation for demonstration purposes
+ */
 
-// Initialize Nostr pool
-const pool = new SimplePool();
-
-interface NostrKeys {
+export interface NostrKeys {
   privateKey: string;
   publicKey: string;
 }
 
+// Interfaces for simulation response
+export interface GiftWrappedMessageSimulation {
+  keys: {
+    sender: {
+      publicKey: string;
+    };
+    receiver: {
+      publicKey: string;
+    };
+    wrapper: {
+      publicKey: string;
+    };
+  };
+  originalMessage: string;
+  directMsg: Event;
+  sealedMsg: Event;
+  giftWrappedMsg: Event;
+  unwrappedMsg: Event | null;
+  decryptedContent: string | null;
+  tampered: {
+    giftWrappedMsg: Event;
+    unwrappedMsg: Event | null;
+    decryptedContent: string | null;
+  };
+}
+
 /**
- * Generate a new pair of Nostr keys
+ * Generate a new Nostr keypair.
  */
 export function generateNostrKeys(): NostrKeys {
   // Generate a random 32-byte private key
+  const privateKeyHex = randomBytes(32).toString('hex');
+  
+  // Create a Uint8Array for nostr-tools
   const privateKeyBytes = new Uint8Array(32);
-  window.crypto.getRandomValues(privateKeyBytes);
+  const privateKeyBuffer = Buffer.from(privateKeyHex, 'hex');
+  for (let i = 0; i < 32; i++) {
+    privateKeyBytes[i] = privateKeyBuffer[i];
+  }
   
-  // Convert to hex string
-  const privateKey = Array.from(privateKeyBytes)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-  
-  // Derive public key from private key
+  // Derive public key using nostr-tools
   const publicKey = getPublicKey(privateKeyBytes);
   
   return {
-    privateKey,
+    privateKey: privateKeyHex,
     publicKey,
   };
 }
@@ -42,18 +65,19 @@ export function generateNostrKeys(): NostrKeys {
  */
 export function importNostrKeys(privateKey: string): NostrKeys {
   try {
-    // Validate the private key (this will throw if invalid)
+    // Validate the private key format
     if (privateKey.length !== 64 || !/^[0-9a-f]+$/i.test(privateKey)) {
       throw new Error('Invalid private key format');
     }
     
-    // Convert hex string to Uint8Array
+    // Convert to Uint8Array for nostr-tools
     const privateKeyBytes = new Uint8Array(32);
+    const privateKeyBuffer = Buffer.from(privateKey, 'hex');
     for (let i = 0; i < 32; i++) {
-      privateKeyBytes[i] = parseInt(privateKey.substring(i * 2, i * 2 + 2), 16);
+      privateKeyBytes[i] = privateKeyBuffer[i];
     }
     
-    // Derive public key from private key
+    // Derive public key using nostr-tools
     const publicKey = getPublicKey(privateKeyBytes);
     
     return {
@@ -67,172 +91,232 @@ export function importNostrKeys(privateKey: string): NostrKeys {
 }
 
 /**
- * Convert a hex string to Uint8Array
+ * Build a plain direct message (kind 14).
+ */
+export function buildDirectMessage(
+  senderPubkey: string,
+  receiverPubkey: string,
+  message: string
+): Event {
+  return {
+    kind: 14,
+    pubkey: senderPubkey,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [["p", receiverPubkey, "wss://relay.example.com"]],
+    content: message,
+    id: '', // To be set after signing
+    sig: '',
+  };
+}
+
+/**
+ * Compute the event's id and signature.
+ */
+async function finishEvent(event: Event, privateKey: string): Promise<Event> {
+  // Convert private key to Uint8Array for nostr-tools
+  const privateKeyBytes = hexToBytes(privateKey);
+  
+  // Use nostr-tools' finalizeEvent which handles both id generation and signing
+  return finalizeEvent(event, privateKeyBytes);
+}
+
+/**
+ * Convert hex string to Uint8Array for nostr-tools
  */
 function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  const bytes = new Uint8Array(32);
+  const buffer = Buffer.from(hex, 'hex');
+  for (let i = 0; i < 32; i++) {
+    bytes[i] = buffer[i];
   }
   return bytes;
 }
 
 /**
- * Send a gift-wrapped (encrypted) Nostr message according to NIP-17
- * 
- * NIP-17 implements a way to send private messages that can only be decrypted by 
- * the intended recipient.
+ * Seal the message (convert to kind 13).
  */
+export async function sealMessage(
+  plainEvent: Event,
+  senderPrivkey: string,
+  receiverPubkey: string
+): Promise<Event> {
+  // Convert private key to Uint8Array for nostr-tools
+  const senderPrivkeyBytes = hexToBytes(senderPrivkey);
+    
+  const encryptedContent = await nip04.encrypt(
+    senderPrivkeyBytes,
+    receiverPubkey,
+    plainEvent.content
+  );
+
+  const sealedEvent: Event = {
+    ...plainEvent,
+    kind: 13, // Sealed message kind
+      content: encryptedContent,
+  };
+    
+  // Finish (sign) the event
+  return await finishEvent(sealedEvent, senderPrivkey);
+    }
+
+/**
+ * Gift-wrap the sealed message (kind 1059).
+ */
+export async function giftWrapMessage(
+  sealedEvent: Event,
+  wrappingPrivkey: string,
+  receiverPubkey: string
+): Promise<Event> {
+  // Convert private key to Uint8Array for nostr-tools
+  const wrappingPrivkeyBytes = hexToBytes(wrappingPrivkey);
+  
+  const giftContent = await nip04.encrypt(
+    wrappingPrivkeyBytes,
+    receiverPubkey,
+    JSON.stringify(sealedEvent)
+  );
+
+  // Get the wrapper's public key
+  const wrappingPubkey = getPublicKey(hexToBytes(wrappingPrivkey));
+  
+  // Create the gift-wrapped event
+  const giftWrappedEvent: Event = {
+    kind: 1059, // Gift-wrapped message kind
+    pubkey: wrappingPubkey,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [["p", receiverPubkey]],
+    content: giftContent,
+    id: '',
+    sig: '',
+  };
+
+  // Finish (sign) the event
+  return await finishEvent(giftWrappedEvent, wrappingPrivkey);
+}
+
+/**
+ * Unwrap a gift-wrapped message.
+ */
+export async function unwrapGiftMessage(
+  giftWrappedEvent: Event,
+  receiverPrivkey: string
+): Promise<Event | null> {
+        try {
+    // Convert private key to Uint8Array for nostr-tools
+    const receiverPrivkeyBytes = hexToBytes(receiverPrivkey);
+    const senderPubkey = giftWrappedEvent.pubkey;
+    
+    // Decrypt the gift-wrapped content
+    const decryptedContent = await nip04.decrypt(
+      receiverPrivkeyBytes,
+      senderPubkey,
+      giftWrappedEvent.content
+    );
+    
+    // Parse the decrypted content back to an Event object
+    return JSON.parse(decryptedContent) as Event;
+  } catch (error) {
+    console.error("Failed to unwrap gift message:", error);
+    return null;
+  }
+}
+
+/**
+ * Unseal (decrypt) a sealed message.
+ */
+export async function unsealMessage(
+  sealedEvent: Event,
+  receiverPrivkey: string
+): Promise<string | null> {
+  try {
+    // Convert private key to Uint8Array for nostr-tools
+    const receiverPrivkeyBytes = hexToBytes(receiverPrivkey);
+    const senderPubkey = sealedEvent.pubkey;
+    
+    // Decrypt the sealed message content
+    return await nip04.decrypt(
+      receiverPrivkeyBytes,
+      senderPubkey,
+      sealedEvent.content
+    );
+  } catch (error) {
+    console.error("Failed to unseal message:", error);
+    return null;
+  }
+}
+
+/**
+ * Generate a full gift-wrapped message simulation
+ */
+export async function generateGiftWrappedMessageSimulation(message: string = "This is a secure message for the Shopstr competency test!"): Promise<GiftWrappedMessageSimulation> {
+  // Generate keys for all participants
+  const sender = generateNostrKeys();
+  const receiver = generateNostrKeys();
+  const wrapper = generateNostrKeys();
+  
+  // Build the direct message
+  const directMsg = buildDirectMessage(sender.publicKey, receiver.publicKey, message);
+  
+  // Seal the message
+  const sealedMsg = await sealMessage(directMsg, sender.privateKey, receiver.publicKey);
+  
+  // Gift-wrap the sealed message
+  const giftWrappedMsg = await giftWrapMessage(sealedMsg, wrapper.privateKey, receiver.publicKey);
+  
+  // Unwrap the gift-wrapped message
+  const unwrappedMsg = await unwrapGiftMessage(giftWrappedMsg, receiver.privateKey);
+  
+  // Unseal the message
+  const decryptedContent = unwrappedMsg ? await unsealMessage(unwrappedMsg, receiver.privateKey) : null;
+  
+  // Create a tampered message (for verification)
+  const tamperedGiftWrappedMsg = {
+    ...giftWrappedMsg,
+    content: giftWrappedMsg.content.substring(0, giftWrappedMsg.content.length - 1) + 'X', // Change last character
+  };
+  
+  const tamperedUnwrappedMsg = await unwrapGiftMessage(tamperedGiftWrappedMsg, receiver.privateKey);
+  const tamperedDecryptedContent = tamperedUnwrappedMsg 
+    ? await unsealMessage(tamperedUnwrappedMsg, receiver.privateKey) 
+    : null;
+  
+  // Return the complete simulation
+  return {
+    keys: {
+      sender: {
+        publicKey: sender.publicKey
+      },
+      receiver: {
+        publicKey: receiver.publicKey
+      },
+      wrapper: {
+        publicKey: wrapper.publicKey
+      }
+    },
+    originalMessage: message,
+    directMsg,
+    sealedMsg,
+    giftWrappedMsg,
+    unwrappedMsg,
+    decryptedContent,
+    tampered: {
+      giftWrappedMsg: tamperedGiftWrappedMsg,
+      unwrappedMsg: tamperedUnwrappedMsg,
+      decryptedContent: tamperedDecryptedContent
+    }
+  };
+}
+
+// For compatibility with the API route
 export async function sendGiftWrappedMessage(
   senderPrivateKey: string,
   recipientPublicKey: string,
   content: string,
 ): Promise<Event> {
-  try {
-    // Convert hex to bytes
-    const privateKeyBytes = hexToBytes(senderPrivateKey);
-    
-    // Encrypt content using NIP-04
-    const encryptedContent = await nip04.encrypt(privateKeyBytes, recipientPublicKey, content);
-    
-    // Create event object
-    const event: Event = {
-      kind: 4, // Encrypted direct message kind (standard in Nostr)
-      created_at: Math.floor(Date.now() / 1000),
-      tags: [
-        ['p', recipientPublicKey], // Tag recipient
-      ],
-      content: encryptedContent,
-      pubkey: getPublicKey(privateKeyBytes),
-    } as Event;
-    
-    // Sign the event
-    const signedEvent = finalizeEvent(event, privateKeyBytes);
-    
-    // Publish to relays
-    const pubs = pool.publish(relays, signedEvent);
-    
-    try {
-      await Promise.all(pubs);
-      console.log('Message published to relays:', relays);
-      return signedEvent;
-    } catch (error) {
-      console.error('Failed to publish message to some relays:', error);
-      // If publishing to at least one relay succeeded, we still return the event
-      return signedEvent;
-    }
-  } catch (error) {
-    console.error('Error sending gift-wrapped message:', error);
-    throw new Error('Failed to send message');
-  }
-}
-
-/**
- * Receive and decrypt gift-wrapped messages
- */
-export async function receiveGiftWrappedMessages(
-  privateKey: string,
-  since: number = 0, // Unix timestamp
-  limit: number = 50,
-): Promise<{ message: string; sender: string; timestamp: number }[]> {
-  const privateKeyBytes = hexToBytes(privateKey);
-  const publicKey = getPublicKey(privateKeyBytes);
-  
-  console.log(`Fetching messages for ${publicKey} from ${relays.length} relays`);
-  
-  try {
-    // Get events from relays
-    const filter: Filter = {
-      kinds: [4], // Encrypted direct message kind
-      '#p': [publicKey],
-      since,
-      limit,
-    };
-    
-    // Use the correct method for SimplePool in nostr-tools v2.x
-    const events = await pool.querySync(relays, filter) as Event[];
-    
-    console.log(`Retrieved ${events.length} encrypted messages`);
-    
-    // Decrypt messages
-    const messages = await Promise.all(
-      events.map(async (event: Event) => {
-        try {
-          const decryptedContent = await nip04.decrypt(privateKeyBytes, event.pubkey, event.content);
-          
-          return {
-            message: decryptedContent,
-            sender: event.pubkey,
-            timestamp: event.created_at,
-          };
-        } catch (error) {
-          console.error('Failed to decrypt message:', error);
-          return null;
-        }
-      })
-    );
-    
-    // Filter out failed decryptions
-    const validMessages = messages.filter(
-      (m: { message: string; sender: string; timestamp: number } | null): 
-      m is { message: string; sender: string; timestamp: number } => m !== null
-    );
-    console.log(`Successfully decrypted ${validMessages.length} messages`);
-    
-    return validMessages;
-  } catch (error) {
-    console.error('Failed to fetch messages from relays:', error);
-    return [];
-  }
-}
-
-/**
- * Close all relay connections
- */
-export function closeNostrConnections(): void {
-  pool.close(relays);
-}
-
-/**
- * Listen for new gift-wrapped messages in real-time
- */
-export function subscribeToGiftWrappedMessages(
-  privateKey: string,
-  callback: (message: { message: string; sender: string; timestamp: number }) => void,
-): () => void {
-  const privateKeyBytes = hexToBytes(privateKey);
-  const publicKey = getPublicKey(privateKeyBytes);
-  
-  console.log(`Subscribing to real-time messages for ${publicKey}`);
-  
-  // Subscribe to events
-  const filter: Filter = {
-    kinds: [4], // Encrypted direct message kind
-    '#p': [publicKey],
-  };
-  
-  // Use the proper subscription method from nostr-tools v2.x
-  pool.subscribe(relays, filter, {
-    onevent: async (event: Event) => {
-      try {
-        const decryptedContent = await nip04.decrypt(privateKeyBytes, event.pubkey, event.content);
-        
-        callback({
-          message: decryptedContent,
-          sender: event.pubkey,
-          timestamp: event.created_at,
-        });
-        
-        console.log('Received and decrypted new message');
-      } catch (error) {
-        console.error('Failed to decrypt message:', error);
-      }
-    }
-  });
-  
-  // Return a function that closes the relay connections
-  return () => {
-    // Close all relay connections
-    pool.close(relays);
-  };
+  // Instead of actually sending, we simulate the gift wrapping process
+  const sender = importNostrKeys(senderPrivateKey);
+  const directMsg = buildDirectMessage(sender.publicKey, recipientPublicKey, content);
+  const sealedMsg = await sealMessage(directMsg, senderPrivateKey, recipientPublicKey);
+  const wrapper = generateNostrKeys(); // Generate a wrapper for simulation
+  return await giftWrapMessage(sealedMsg, wrapper.privateKey, recipientPublicKey);
 } 

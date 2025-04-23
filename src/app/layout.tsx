@@ -5,7 +5,7 @@ import { ThemeProvider } from "@/lib/hooks/use-theme";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Shopstr Payment Escrow",
+  title: "Shopstr-Competency-Test",
   description: "A secure payment escrow system for Shopstr",
 };
 
@@ -16,7 +16,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>
+      <body suppressHydrationWarning>
         <ThemeProvider>
           <Layout>{children}</Layout>
           <Toaster />

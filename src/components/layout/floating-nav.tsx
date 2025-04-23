@@ -7,8 +7,7 @@ import {
   IconMessage,
   IconWallet,
   IconBolt,
-  IconScale,
-  IconSettings,
+  IconBrandGithub,
 } from "@tabler/icons-react";
 
 export function FloatingNav() {
@@ -42,23 +41,16 @@ export function FloatingNav() {
       href: "/lightning",
     },
     {
-      title: "Disputes",
+      title: "GitHub Profile",
       icon: (
-        <IconScale className="h-full w-full text-neutral-500 dark:text-neutral-300" />
+        <IconBrandGithub className="h-full w-full text-neutral-500 dark:text-neutral-300" />
       ),
-      href: "/disputes",
-    },
-    {
-      title: "Settings",
-      icon: (
-        <IconSettings className="h-full w-full text-neutral-500 dark:text-neutral-300" />
-      ),
-      href: "/settings",
+      href: "https://github.com/Wali05",
     },
   ];
   
   return (
-    <div className="fixed bottom-8 left-0 right-0 z-50 mx-auto flex justify-center">
+    <div className="fixed top-20 left-0 right-0 z-50 mx-auto flex justify-center">
       <FloatingDock
         items={links}
         desktopClassName="shadow-xl"

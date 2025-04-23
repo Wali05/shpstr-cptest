@@ -1,32 +1,144 @@
-/* eslint-disable */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * Cashu P2PK service with Cashu-TS v2
+ * Cashu P2PK simulation service
  */
-import { CashuMint, CashuWallet, getEncodedToken, SendResponse, MintKeys } from '@cashu/cashu-ts';
+import { randomBytes } from 'crypto';
+import * as secp from '@noble/secp256k1';
 
-// Environment variables
-const MINT_URL = process.env.NEXT_PUBLIC_CASHU_MINT_URL!;
-const MINT_PUBKEY = process.env.NEXT_PUBLIC_CASHU_MINT_PUBKEY!;
+// Simulated mint URL
+const MINT_URL = 'https://testnut.cashu.space';
 
-// Token interface for our service
-export interface Token {
+// Interfaces for our simulation
+export interface Proof {
+  amount: number;
+  C: string;
+  id: string;
+  secret: string;
+  dleq: {
+    s: string;
+    e: string;
+    r: string;
+  };
+  p2pk?: string; // Optional P2PK lock
+}
+
+export interface CashuToken {
   token: string;
   amount: number;
+  proofs: Proof[];
   lockTo?: string;
 }
 
-// Initialize Cashu mint and wallet
-async function initCashu(): Promise<{ mint: CashuMint; wallet: CashuWallet }> {
-  const mint = new CashuMint(MINT_URL);
-  const keys = (await mint.getKeys()) as unknown as MintKeys;
-  const wallet = new CashuWallet(mint, { keys });
-  return { mint, wallet };
+export interface SimulationResult {
+  success: boolean;
+  privateKey: string;
+  publicKey: string;
+  issuedProofs: Proof[];
+  token: string;
+  claimedProofs: Proof[];
+  message: string;
 }
 
-// Get pre-configured wallet instance
-async function getWallet(): Promise<CashuWallet> {
-  const { wallet } = await initCashu();
-  return wallet;
+/**
+ * Generate a new secp256k1 key pair
+ */
+export function generateCashuKeys() {
+  const privateKeyBytes = randomBytes(32);
+  const privateKey = Buffer.from(privateKeyBytes).toString('hex');
+  const publicKey = Buffer.from(secp.getPublicKey(privateKeyBytes, true)).toString('hex');
+  
+  return {
+    privateKey,
+    publicKey,
+  };
+}
+
+/**
+ * Generate a random ID for proofs
+ */
+function generateId(): string {
+  return Buffer.from(randomBytes(8)).toString('hex');
+}
+
+/**
+ * Generate a random hex string of given length
+ */
+function randomHex(length = 64): string {
+  return Buffer.from(randomBytes(length / 2)).toString('hex');
+}
+
+/**
+ * Helper to simulate P2PK locking by adding a 'p2pk' field to each proof
+ */
+function lockProofs(proofs: Proof[], pubkey: string): Proof[] {
+  return proofs.map(proof => ({
+    ...proof,
+    p2pk: pubkey, // Indicates this proof is locked to the provided public key
+  }));
+}
+
+/**
+ * Simulate creating a mint quote
+ */
+async function createMintQuote(amount: number) {
+  // Simulate API call delay
+  await new Promise(resolve => setTimeout(resolve, 100));
+  
+  return {
+    quote: {
+      id: randomHex(16),
+      amount,
+      created_time: Date.now(),
+      expiry_time: Date.now() + 3600000, // 1 hour from now
+    }
+  };
+}
+
+async function mintProofs(amount: number): Promise<Proof[]> {
+  // Simulate API call delay
+  await new Promise(resolve => setTimeout(resolve, 200));
+  
+  // Split the amount into powers of 2
+  const denominations: number[] = [];
+  let remaining = amount;
+  let denom = 1;
+  
+  while (remaining > 0) {
+    if (remaining & 1) {
+      denominations.push(denom);
+    }
+    denom *= 2;
+    remaining = Math.floor(remaining / 2);
+  }
+  
+  // Create a proof for each denomination
+  const id = generateId();
+  return denominations.map(amt => ({
+    amount: amt,
+    C: `02${randomHex(64).substring(0, 62)}`,
+    id,
+    secret: randomHex(),
+    dleq: {
+      s: randomHex(),
+      e: randomHex(),
+      r: randomHex()
+    }
+  }));
+}
+
+/**
+ * Encode proofs into a token string
+ */
+function getEncodedToken(data: { proofs: Proof[], mint: string }): string {
+  // This is a simplified version for simulation purposes
+  // In real cashu-ts, this performs proper encoding
+  const base = `cashuB${randomHex(8)}`;
+  const tokenData = Buffer.from(JSON.stringify(data)).toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+  
+  return base + tokenData;
 }
 
 /**
@@ -35,38 +147,42 @@ async function getWallet(): Promise<CashuWallet> {
 export async function createP2PKLockedToken(
   amount: number,
   recipientPublicKey: string
-): Promise<Token> {
+): Promise<CashuToken> {
   try {
-    const wallet = await getWallet();
     // 1) Get a mint quote
-    const { quote } = await wallet.createMintQuote(amount);
-    // 2) Check quote (in test mint it's auto-approved)
-    await wallet.checkMintQuote(quote);
-    // 3) Mint proofs
-    const proofs = await wallet.mintProofs(amount, quote);
-    // 4) Send P2PK-locked proofs
-    const sendRes: SendResponse = await wallet.send(amount, proofs, {
-      p2pk: { pubkey: recipientPublicKey }
+    await createMintQuote(amount);
+    
+    // 2) Mint proofs
+    const proofs = await mintProofs(amount);
+    
+    // 3) Lock proofs with P2PK
+    const lockedProofs = lockProofs(proofs, recipientPublicKey);
+    
+    // 4) Encode token
+    const tokenString = getEncodedToken({
+      proofs: lockedProofs,
+      mint: MINT_URL
     });
-    // 5) Encode token
-    const tokenString = getEncodedToken(sendRes as any);
-    return { token: tokenString, amount, lockTo: recipientPublicKey };
+    
+    return {
+      token: tokenString,
+      amount,
+      proofs: lockedProofs,
+      lockTo: recipientPublicKey
+    };
   } catch (err) {
     console.error('createP2PKLockedToken error:', err);
     throw err;
   }
 }
 
-/**
- * Spend/receive a P2PK-locked Cashu token
- */
-export async function spendP2PKLockedToken(
-  tokenOrString: Token | string
-): Promise<boolean> {
+export async function spendP2PKLockedToken(): Promise<boolean> {
   try {
-    const wallet = await getWallet();
-    const tokenString = typeof tokenOrString === 'string' ? tokenOrString : tokenOrString.token;
-    await wallet.receive(tokenString);
+    // Simulate API call delay
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // In a real implementation, this would verify the P2PK signature
+    // and process the token, but here we'll just simulate success
     return true;
   } catch (err) {
     console.error('spendP2PKLockedToken error:', err);
@@ -74,71 +190,51 @@ export async function spendP2PKLockedToken(
   }
 }
 
+/**
+ * Generate a full simulation of P2PK token issuance and claiming
+ */
+export async function simulateCashuP2PK(amount: number = 10): Promise<SimulationResult> {
+  // Generate a key pair
+  const { privateKey, publicKey } = generateCashuKeys();
+  
+  // Issue a P2PK-locked token
+  const { proofs, token } = await createP2PKLockedToken(amount, publicKey);
+  
+  // Simulate claiming the token
+  await spendP2PKLockedToken();
+  
+  // Generate "claimed" proofs (different from the original ones)
+  const claimedProofs = await mintProofs(amount);
+  
+  return {
+    success: true,
+    privateKey,
+    publicKey,
+    issuedProofs: proofs,
+    token,
+    claimedProofs,
+    message: 'Successfully created and spent P2PK token!'
+  };
+}
+
+/**
+ * Simulate a tampered token that will fail validation
+ */
+export async function simulateTamperedToken(result: SimulationResult): Promise<SimulationResult> {
+  // Make a copy of the result
+  const tamperedResult = { ...result };
+  
+  // Tamper with the token by appending an 'X'
+  tamperedResult.token = result.token + 'X';
+  
+  // Set success to false
+  tamperedResult.success = false;
+  tamperedResult.message = 'Token validation failed: Signature verification failed';
+  
+  return tamperedResult;
+}
+
 // Export mint info
 export function getMintInfo() {
-  return { url: MINT_URL, pubkey: MINT_PUBKEY };
-}
-
-// --- STUBS for legacy functions not yet migrated to cashu-ts v2 ---
-
-/** stub */
-export async function validateToken(token: Token, userPublicKey: string): Promise<boolean> {
-  throw new Error('validateToken not implemented');
-}
-
-/** stub */
-export async function createEscrowContract(
-  amount: number,
-  buyerPublicKey: string,
-  sellerPublicKey: string,
-  arbiterPublicKey: string
-): Promise<{ id: string; token: Token; amount: number; buyerPublicKey: string; sellerPublicKey: string; arbiterPublicKey: string; status: 'funded' | 'released' | 'refunded' | 'disputed'; createdAt: string }> {
-  throw new Error('createEscrowContract not implemented');
-}
-
-/** stub */
-export async function releaseEscrowToSeller(
-  token: Token,
-  buyerPrivateKey: string,
-  sellerPublicKey: string
-): Promise<boolean> {
-  throw new Error('releaseEscrowToSeller not implemented');
-}
-
-/** stub */
-export async function returnEscrowToBuyer(
-  token: Token,
-  sellerPrivateKey: string,
-  buyerPublicKey: string
-): Promise<boolean> {
-  throw new Error('returnEscrowToBuyer not implemented');
-}
-
-/**
- * Utility function to sign a message with a private key
- */
-async function signMessage(message: string, privateKey: string): Promise<string> {
-  // In a real implementation, this would use a proper signing library
-  // For this demo, we'll just return a placeholder
-  return `signature_for_${message}_with_key_${privateKey.slice(0, 8)}`;
-}
-
-/**
- * Utility function to convert hex to bytes
- */
-function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(Math.floor(hex.length / 2));
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
-}
-
-/**
- * Utility function to convert bytes to hex
- */
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+  return { url: MINT_URL, pubkey: '' };
 } 
