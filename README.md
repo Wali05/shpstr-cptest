@@ -7,8 +7,6 @@ A Next.js application for secure payment escrow using Bitcoin technologies, enab
 - **Gift-wrapped Nostr Messages**: Send and receive encrypted messages using NIP-17 protocol
 - **P2PK-locked Cashu Tokens**: Create tokens cryptographically locked to specific public keys
 - **HODL Invoices**: Time-locked Lightning invoices for secure payment settlement
-- **Dispute Resolution**: Open disputes with optional third-party arbitration
-- **Real-time Updates**: Live subscription to Nostr relays for messaging
 
 ## 🧰 Tech Stack
 
@@ -31,7 +29,7 @@ A Next.js application for secure payment escrow using Bitcoin technologies, enab
 ### Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/shopstr-payment-escrow.git
+git clone https://github.com/Wali05/shpstr-cptest.git
 cd shopstr-payment-escrow
 ```
 

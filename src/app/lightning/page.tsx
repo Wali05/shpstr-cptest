@@ -23,14 +23,12 @@ import {
   IconRotate,
   IconReceipt,
   IconCoins,
-  IconChevronRight,
   IconKey,
   IconCheckbox,
   IconHash,
   IconWallet,
   IconClockHour4,
   IconHistory,
-  IconList,
   IconTrash
 } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
@@ -109,7 +107,6 @@ export default function LightningPage() {
   // Manual process state
   const [createdInvoice, setCreatedInvoice] = useState<HodlInvoice | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<'success' | 'pending' | 'failed' | null>(null);
-  const [settledInvoice, setSettledInvoice] = useState<string | null>(null);
   
   // Track pending and settled invoices by hash
   const [pendingInvoices, setPendingInvoices] = useState<{[hash: string]: string}>({});
@@ -291,16 +288,7 @@ export default function LightningPage() {
       // In a real implementation, this would decode the payment request
       // For simulation, look for invoices we created
       let invoiceHash = '';
-      let matchedInvoice: InvoiceHistory | null = null;
-      
-      // Check if this invoice is in our history
-      for (const invoice of invoiceHistory) {
-        if (invoice.paymentRequest === paymentRequest) {
-          invoiceHash = invoice.hash;
-          matchedInvoice = invoice;
-          break;
-        }
-      }
+      const matchedInvoice = invoiceHistory.find(inv => inv.paymentRequest === paymentRequest);
       
       // If we found it in history but not directly, update
       if (matchedInvoice && !invoiceHash) {
@@ -369,14 +357,11 @@ export default function LightningPage() {
       const hashMatches = calculatedHash === providedHash;
       
       // Find in history
-      let matchedInvoice = invoiceHistory.find(inv => inv.hash === providedHash);
+      const matchedInvoice = invoiceHistory.find(inv => inv.hash === providedHash);
       
       if (hashMatches) {
         // Transition to success animation
         setSettleAnimationStage('success');
-      setSettledInvoice(values.hash);
-        
-        // Mark this invoice as settled
         setSettledInvoices(prev => ({
           ...prev,
           [providedHash]: true
@@ -399,7 +384,7 @@ export default function LightningPage() {
       
       toast({
         title: 'Invoice Settled',
-          description: 'Successfully settled the HODL invoice by revealing the correct preimage',
+        description: 'Successfully settled the HODL invoice by revealing the correct preimage',
       });
       
         // Don't reset form immediately, let user see what they entered
@@ -439,8 +424,8 @@ export default function LightningPage() {
     }
   };
   
-  // Function to use a specific invoice from history
-  const useHistoryInvoice = (invoice: InvoiceHistory, purpose: 'pay' | 'settle') => {
+  // Function to handle a specific invoice from history
+  const handleHistoryInvoice = (invoice: InvoiceHistory, purpose: 'pay' | 'settle') => {
     setSelectedHistoryInvoice(invoice);
     
     if (purpose === 'pay') {
@@ -763,7 +748,7 @@ export default function LightningPage() {
                               variant="ghost"
                               size="sm"
                               className="h-7"
-                              onClick={() => useHistoryInvoice(invoice, 'pay')}
+                              onClick={() => handleHistoryInvoice(invoice, 'pay')}
                               disabled={invoice.status === 'settled'}
                             >
                               <IconWallet size={14} className="text-blue-500" />
@@ -772,7 +757,7 @@ export default function LightningPage() {
                               variant="ghost"
                               size="sm"
                               className="h-7"
-                              onClick={() => useHistoryInvoice(invoice, 'settle')}
+                              onClick={() => handleHistoryInvoice(invoice, 'settle')}
                               disabled={invoice.status === 'settled' || invoice.status === 'canceled'}
                             >
                               <IconKey size={14} className="text-amber-500" />
